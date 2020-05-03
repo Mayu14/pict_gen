@@ -3,7 +3,7 @@
 import numpy as np
 from skimage.color import rgb2hsv, hsv2rgb
 from preprocessing import load_all_img, load_face_img, load_bust_img, load_portrait_img, clast2cfirst, cfirst2clast
-import cv2
+from keras.preprocessing.image import ImageDataGenerator
 
 """
 やるべきこと
@@ -26,7 +26,7 @@ mode = "face"
 pct_size = 100
 is_channel_first = False
 grayscale = True
-inflate = True
+inflate_hsv = True
 
 def __load_img(mode="face"):
     mode = mode.lower()
@@ -74,40 +74,95 @@ def __sample_plot(img_array, id=0):
         img_show(__img2std_reverse(__bgr2rgb(img_array[id], arr=False)))
 
 
-def __img2grayscale(std_img_array):
-    if is_channel_first:
-        ch = 1
-
+def __img2grayscale(std_img_array, gray_variation=6):
+    if gray_variation < 1:
+        raise ValueError("hdv_variation should be greater than 1")
     else:
-        ch = 3
-    sh = std_img_array.shape
-    new_array = np.empty([6 * sh[0], sh[1], sh[2], sh[3]])
+        if is_channel_first:
+            ch = 1
+        else:
+            ch = 3
+        sh = std_img_array.shape
+        new_array = np.empty([gray_variation * sh[0], sh[1], sh[2], sh[3]])
 
-    img_array = __img2std_reverse(std_img_array)    # for HDTV coefficient method
-    R,G,B = 2,1,0   # cv2
-    mid_value_method = lambda img: np.max(img, axis=ch-1)/2 + np.min(img, axis=ch-1)/2
-    ntsc_coef_method = lambda img: 0.298912*img[:, :, R] + 0.586611*img[:,:,G] + 0.114478*img[:,:,B]
-    hdtv_coef_method = lambda img, x=2.2: (0.222015*(img[:, :, R]**x) + 0.706655*(img[:,:,G]**x) + 0.071330*(img[:,:,B]**x))**(1.0/x)
-    simp_mean_method = lambda img: np.mean(img, axis=ch-1)
-    g_channel_method = lambda img: img[:,:,G]
-    med_value_method = lambda img: np.median(img, axis=ch-1)
+        img_array = __img2std_reverse(std_img_array)    # for HDTV coefficient method
+        R,G,B = 2,1,0   # cv2
+        mid_value = lambda img: np.max(img, axis=ch-1)/2 + np.min(img, axis=ch-1)/2
+        ntsc_coef = lambda img: 0.298912*img[:, :, R] + 0.586611*img[:,:,G] + 0.114478*img[:,:,B]
+        hdtv_coef = lambda img, x=2.2: (0.222015*(img[:, :, R]**x) + 0.706655*(img[:,:,G]**x) + 0.071330*(img[:,:,B]**x))**(1.0/x)
+        simp_mean = lambda img: np.mean(img, axis=ch-1)
+        g_channel = lambda img: img[:,:,G]
+        med_value = lambda img: np.median(img, axis=ch-1)
+        methods = [ntsc_coef, g_channel, med_value, hdtv_coef, simp_mean, mid_value]
 
-    pseudo_gray = lambda img_gray: np.einsum('ij,k->ijk', img_gray,[1,1,1])
+        pseudo_gray = lambda img_gray: np.einsum('ij,k->ijk', img_gray,[1,1,1])
 
-    for i, img in enumerate(img_array):
-        new_array[i + 0*sh[0]] = pseudo_gray(mid_value_method(img))
-        new_array[i + 1*sh[0]] = pseudo_gray(ntsc_coef_method(img))
-        new_array[i + 2*sh[0]] = pseudo_gray(hdtv_coef_method(img))
-        new_array[i + 3*sh[0]] = pseudo_gray(simp_mean_method(img))
-        new_array[i + 4*sh[0]] = pseudo_gray(g_channel_method(img))
-        new_array[i + 5*sh[0]] = pseudo_gray(med_value_method(img))
+        for i, img in enumerate(img_array):
+            for j in range(gray_variation):
+                new_array[i + j*sh[0]] = np.clip(pseudo_gray(methods[j](img)), 0, 255)
 
-    std_img_array = __img2std(new_array)
+        std_img_array = __img2std(new_array)
 
-    for i in range(36):
-        __sample_plot(std_img_array, id=0 + i*int(sh[0]/6))
+        debug = False
+        if debug:
+            for i in range(36):
+                __sample_plot(std_img_array, id=0 + i*int(sh[0]/6))
 
-    return std_img_array
+        return std_img_array
+
+def __img2std(img_array):
+    return img_array / 127.5 - 1   # [-1, 1]
+
+def __img2std_reverse(img_array):
+    return (img_array + 1) * 127.5
+
+# from http://aidiary.hatenablog.com/entry/20161212/1481549365
+def __draw_images(datagen, x, result_images):
+    import os, glob, shutil
+    import matplotlib.pyplot as plt
+    import cv2
+    from matplotlib.gridspec import GridSpec
+    # 出力先ディレクトリを作成
+    temp_dir = "temp"
+    os.mkdir(temp_dir)
+
+    # generatorから9個の画像を生成
+    # xは1サンプルのみなのでbatch_sizeは1で固定
+    x = __bgr2rgb(x)
+    g = datagen.flow(x, batch_size=30, save_to_dir=temp_dir, save_prefix='img', save_format='jpg')
+    for i in range(9):
+        batch = g.next()
+    # 生成した画像を3x3で描画
+    images = glob.glob(os.path.join(temp_dir, "*.jpg"))
+    fig = plt.figure()
+    gs = GridSpec(3, 3)
+    gs.update(wspace=0.1, hspace=0.1)
+    for i in range(9):
+        img = cv2.imread(images[i])
+        plt.subplot(gs[i])
+        plt.imshow(img, aspect='auto')
+        plt.axis("off")
+    plt.savefig(result_images)
+    # 出力先ディレクトリを削除
+    shutil.rmtree(temp_dir)
+
+def __image_data_generator(img_array):
+    datagen = ImageDataGenerator(
+        # zca_whitening=False,
+        rotation_range=10,
+        width_shift_range=0.05,
+        height_shift_range=0.05,
+        shear_range=0.1,
+        zoom_range=[0.99,1.01],
+        channel_shift_range=0.01,
+        fill_mode='nearest',
+        horizontal_flip=True,
+        vertical_flip=False
+    )
+    debug = False
+    if debug:
+        __draw_images(datagen,img_array,"result.jpg")
+    return datagen
 
 # from http://adragoona.hatenablog.com/entry/2017/12/04/010526
 def __adjust_hue_saturation_lightness(
@@ -127,33 +182,7 @@ def __adjust_hue_saturation_lightness(
     img = np.clip(hsv2rgb(img), 0, 255)
     return img
 
-def __rotate_img(std_img_array, rot_variation=6, max_rot_deg=15):
-    if rot_variation < 2:
-        if rot_variation == 1:
-            return std_img_array
-        else:
-            raise ValueError("rot_variation should be greater than 1")
-    else:
-        if max_rot_deg < 0:
-            raise ValueError("max_rot_deg should be greater than 0")
-
-        img_array = __img2std_reverse(std_img_array)
-
-        sh = std_img_array.shape
-        new_array = np.empty([rot_variation * sh[0], sh[1], sh[2], sh[3]])
-        inc_rot = max_rot_deg / rot_variation
-        min_deg = - max_rot_deg / 2
-
-        for i, img in enumerate(img_array):
-            new_array[i + 0 * sh[0]] = pseudo_gray(mid_value_method(img))
-            new_array[i + 1 * sh[0]] = pseudo_gray(ntsc_coef_method(img))
-            new_array[i + 2 * sh[0]] = pseudo_gray(hdtv_coef_method(img))
-            new_array[i + 3 * sh[0]] = pseudo_gray(simp_mean_method(img))
-            new_array[i + 4 * sh[0]] = pseudo_gray(g_channel_method(img))
-            new_array[i + 5 * sh[0]] = pseudo_gray(med_value_method(img))
-
-
-def __inflate(std_img_array, hdv_variation=6):
+def __inflate_hsv(std_img_array, hdv_variation=6):
     if hdv_variation < 2:
         if hdv_variation == 1:
             return std_img_array
@@ -184,29 +213,48 @@ def __inflate(std_img_array, hdv_variation=6):
         std_img_array = __img2std(__rgb2bgr(new_array))
         return std_img_array
 
-def __img2std(img_array):
-    return img_array / 127.5 - 1   # [-1, 1]
-
-def __img2std_reverse(img_array):
-    return (img_array + 1) * 127.5
 
 def load_data(mode="face"):
     loaded_img = __load_img(mode)
     # 読み込んだ上で標準化
     loaded_img = __img2std(loaded_img)
-
     # 適宜水増し処理
-    if inflate:
-        loaded_img = __inflate(loaded_img)
-
+    if inflate_hsv:
+        loaded_img = __inflate_hsv(loaded_img)
     # グレースケール化
     if grayscale:
         loaded_img = __img2grayscale(loaded_img)
+        loaded_img = np.max(loaded_img, axis=3, keepdims=True)
 
-    return loaded_img
+    datagen = __image_data_generator(loaded_img)
+
+    return loaded_img, datagen
 
 def main():
-    x_train = load_data()
+    x_train, _ = load_data()
+    print(x_train.shape)
+    print(np.max(x_train), np.min(x_train))
+
+
 
 if __name__ == '__main__':
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
