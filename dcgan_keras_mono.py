@@ -13,9 +13,11 @@ from keras.layers import Flatten, Dropout
 import matplotlib.pyplot as plt
 
 from mainprocess import load_data
+import tensorflow as tf
+from keras.backend import tensorflow_backend as KTF
 
 BATCH_SIZE = 32
-NUM_EPOCH = 20
+NUM_EPOCH = 2000
 GENERATED_IMAGE_PATH = Path('generated_images/dcgan/') # 生成画像の保存先
 latent_dim = 100
 size = 100
@@ -23,6 +25,7 @@ mode = "face"
 
 seed = 0
 np.random.seed(seed)
+tf.random.set_random_seed(seed)
 
 # refernce from: https://qiita.com/God_KonaBanana/items/293d49e3c34601a1810b
 def generator_model():
@@ -72,7 +75,6 @@ def train():
     print(X_train.shape)
     """
     X_train, datagen = load_data(mode=mode)
-    d_gen = datagen.flow(X_train, batch_size=BATCH_SIZE, seed=seed)
     print(X_train.shape)
 
     discriminator = discriminator_model()
@@ -90,7 +92,7 @@ def train():
     print('Number of batches:', num_batches)
 
     for epoch in range(NUM_EPOCH):
-
+        d_gen = datagen.flow(X_train, batch_size=BATCH_SIZE, seed=seed)
         for index in range(num_batches):
             noise = np.array([np.random.uniform(-1, 1, 100) for _ in range(BATCH_SIZE)])
             # image_batch = X_train[index*BATCH_SIZE:(index+1)*BATCH_SIZE]
@@ -128,8 +130,11 @@ def train():
             g_loss = dcgan.train_on_batch(noise, [1]*BATCH_SIZE)
             print("epoch: %d, batch: %d, g_loss: %f, d_loss: %f" % (epoch, index, g_loss, d_loss))
 
-        generator.save_weights('generator_fashion_mnist.h5')
-        discriminator.save_weights('discriminator_fashion_mnist.h5')
+        generator.save_weights(f'generator_{mode}_dcgan.h5')
+        discriminator.save_weights(f'discriminator_{mode}_dcgan.h5')
 
 if __name__ == '__main__':
+    config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+    session = tf.Session(config=config)
+    KTF.set_session(session)
     train()
