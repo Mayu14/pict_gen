@@ -7,9 +7,9 @@ import pickle
 
 """
 やるべきこと
-・入力画像サイズを指定値に変更(一斉リサイズ)
-・画像→ndarray
-・教師データとして使える形でpklとして保存
+・入力画像サイズを指定値に変更(一斉リサイズ)(実装済)
+・画像→ndarray(実装済)
+・教師データとして使える形でpklとして保存(実装済)
 
 やりたいこと
 ・顔検知→周辺の一定領域のみ切り出し(精度向上のため)
@@ -46,6 +46,13 @@ def __resize_img_rect(img, size, algorithm=cv2.INTER_AREA):
     # cv2.INTER_LANCZOS4, cv2.INTER_CUBIC, cv2.INTER_LINEAR, cv2.INTER_NEAREST
     return cv2.resize(img, (size, size), interpolation=algorithm)
 
+def clast2cfirst(img_array):
+    return img_array.transpose([0, 3, 1, 2])
+
+def cfirst2clast(img_array):
+    return img_array.transpose([0, 2, 3, 1])
+
+
 def __load_img(folder="bust", size=100, is_c_first=False):
     pkl = Path(__gen_pkl_name(folder, size))
     if not pkl.exists():
@@ -54,7 +61,7 @@ def __load_img(folder="bust", size=100, is_c_first=False):
         img_array = pickle.load(f)
 
     if is_c_first:
-        img_array = img_array.transpose([0, 3, 1, 2])
+        img_array = clast2cfirst(img_array)
     return img_array
 
 def __img2pickle(folder="bust", size=100):
