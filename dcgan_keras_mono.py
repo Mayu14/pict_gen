@@ -119,6 +119,7 @@ def train():
                 GENERATED_IMAGE_PATH.mkdir(parents=True, exist_ok=True)
                 filename = GENERATED_IMAGE_PATH / Path(f"{mode}_%04d_%04d.png" % (epoch,index))
                 plt.savefig(filename)
+                plt.close()
 
             # discriminatorを更新
             X = np.concatenate((image_batch, generated_images))
