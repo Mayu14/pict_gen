@@ -33,6 +33,11 @@ def load_face_img(size=pct_size, is_c_first=is_channel_first):
 def load_portrait_img(size=pct_size, is_c_first=is_channel_first):
     return __load_img("portrait", size=size, is_c_first=is_c_first)
 
+def load_processed_img(size=pct_size, is_c_first=is_channel_first):
+    imgs1 = load_face_img(pct_size, is_channel_first)
+    imgs2 = __load_img("processed", size=size, is_c_first=is_c_first)
+    return np.concatenate([imgs1, imgs2], axis=0)
+
 def __error_msg(msg):
     try:
         raise ValueError(msg)
