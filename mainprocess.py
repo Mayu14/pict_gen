@@ -2,7 +2,7 @@
 
 import numpy as np
 from skimage.color import rgb2hsv, hsv2rgb
-from preprocessing import load_all_img, load_face_img, load_bust_img, load_portrait_img, load_extracted_img, clast2cfirst, cfirst2clast
+from preprocessing import load_all_img, load_face_img, load_bust_img, load_portrait_img, load_extracted_img, clast2cfirst, cfirst2clast, __resize_img_rect
 from keras.preprocessing.image import ImageDataGenerator
 from given.ellipse_blur import multi_block_blur_for_array
 
@@ -26,7 +26,7 @@ from given.ellipse_blur import multi_block_blur_for_array
 mode = "face"
 pct_size = 100
 is_channel_first = False
-grayscale = True
+grayscale = False
 inflate_hsv = True
 
 def __load_img(mode="face"):
@@ -132,7 +132,7 @@ def __draw_images(datagen, x, result_images):
     # generatorから9個の画像を生成
     # xは1サンプルのみなのでbatch_sizeは1で固定
     x = __bgr2rgb(x)
-    g = datagen.flow(x, batch_size=30, save_to_dir=temp_dir, save_prefix='img', save_format='jpg')
+    g = datagen.flow(x, batch_size=32, save_to_dir=temp_dir, save_prefix='img', save_format='jpg')
     for i in range(9):
         batch = g.next()
     # 生成した画像を3x3で描画
@@ -152,12 +152,12 @@ def __draw_images(datagen, x, result_images):
 def __image_data_generator(img_array):
     datagen = ImageDataGenerator(
         # zca_whitening=False,
-        rotation_range=5,
-        width_shift_range=0.01,
-        height_shift_range=0.01,
-        shear_range=0.1,
-        zoom_range=[0.99,1.01],
-        channel_shift_range=0.01,
+        rotation_range=10,
+        width_shift_range=0.025,
+        height_shift_range=0.025,
+        shear_range=0.05,
+        zoom_range=[0.98,1.02],
+        channel_shift_range=0.05,
         fill_mode='nearest',
         horizontal_flip=True,
         vertical_flip=False
@@ -218,18 +218,34 @@ def __inflate_hsv(std_img_array, hdv_variation=6):
         return std_img_array
 
 
-def load_data(mode="face"):
+def load_data(mode="face", size=-1):
     loaded_img = __load_img(mode)
     #loaded_img = multi_block_blur_for_array(loaded_img)
     # 読み込んだ上で標準化
     loaded_img = __img2std(loaded_img)
+    ch = 3
     # 適宜水増し処理
     if inflate_hsv:
-        loaded_img = __inflate_hsv(loaded_img)
+        loaded_img = __inflate_hsv(loaded_img, hdv_variation=8)
     # グレースケール化
     if grayscale:
+        ch = 1
         loaded_img = __img2grayscale(loaded_img)
         loaded_img = np.max(loaded_img, axis=3, keepdims=True)
+
+    if size > 0:
+        import cv2
+        original_img = loaded_img
+        sh = loaded_img.shape
+        if is_channel_first:
+            loaded_img = np.empty((2*sh[0], sh[1], size, size))
+            reshape = (ch, size, size)
+        else:
+            loaded_img = np.empty((2*sh[0], size, size, sh[3]))
+            reshape = (size, size, ch)
+        for i, img in enumerate(original_img):
+            loaded_img[i] = __resize_img_rect(img, size, algorithm=cv2.INTER_LANCZOS4).reshape(reshape)
+            loaded_img[i + sh[0]] = __resize_img_rect(img, size, algorithm=cv2.INTER_AREA).reshape(reshape)
 
     datagen = __image_data_generator(loaded_img)
 
