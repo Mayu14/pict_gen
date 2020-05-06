@@ -206,10 +206,10 @@ def __inflate_hsv(std_img_array, hdv_variation=6):
         for i, img in enumerate(img_array_rgb):
             for j in range(hdv_variation):
                 if not grayscale:
-                    new_array[i + j*sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], 0, -max_sat+j*inc_sat, 0)
+                    new_array[i + j*sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], 0, int(-max_sat+j*inc_sat), 0)
                 else:
                     # new_array[i + j*sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], np.random.randint(-179,179,1), -max_sat+j*inc_sat, np.random.randint(-99,99,1))
-                    new_array[i + j * sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], 0, -max_sat + j * inc_sat, 0)
+                    new_array[i + j * sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], 0, int(-max_sat + j * inc_sat), 0)
 
         if is_channel_first:
             new_array = clast2cfirst(new_array)
