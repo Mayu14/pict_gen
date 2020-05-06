@@ -25,10 +25,10 @@ latent_dim = 100
 size = 256
 FINAL_STAGE = int(np.log2(256))
 mode = "extracted"
-
+weight_path.mkdir(parents=True, exist_ok=True)
 seed = 0
 np.random.seed(seed)
-tf.compat.v1.random.set_random_seed(seed)
+tf.random.set_random_seed(seed)
 
 l2_penalty = 0.00001
 rand_stddev = 0.02
@@ -184,14 +184,14 @@ def dis_merge(stage=1, alpha=0.5):
 def dis_final(stage=1):
     reg = regularizers.l2(l2_penalty)
     rand_init = RandomNormal(stddev=rand_stddev)
-    res = 2 ** (stage + 1)
-    input = Input((res, res, num_feat(stage)))
+    res_r1 = 2 ** stage
+    input = Input((res_r1, res_r1, num_feat(stage)))
     __x = Flatten()(input)
     __x = Dense(units=num_feat(stage), kernel_initializer=rand_init,
-                kernel_regularizer=reg, bias_regularizer=reg)(__x)
+                kernel_regularizer=reg, bias_regularizer=reg, name="dis_final_dense_1")(__x)
     __x = LeakyReLU(0.2)(BatchNormalization()(__x))
     __x = Dense(units=1, kernel_initializer=rand_init,
-                kernel_regularizer=reg, bias_regularizer=reg)(__x)
+                kernel_regularizer=reg, bias_regularizer=reg, name="dis_final_dense_2")(__x)
     output = Activation('sigmoid')(__x)
     return Model(input, output, name=f"dis_final_{stage}")
 
@@ -284,12 +284,12 @@ def train(stage=1, num_epoch=100):
         alpha = epoch / float(num_epoch)
 
         discriminator = build_discriminator(stage, alpha=alpha)
+        discriminator.trainable = True
         discriminator.compile(loss='binary_crossentropy', optimizer=d_opt)
+
         # generator+discriminator （discriminator部分の重みは固定）
         discriminator.trainable = False
         generator = build_generator(stage=stage, alpha=alpha)
-
-        # generator =
         pggan = build_pggan(generator, discriminator)
         pggan.compile(loss='binary_crossentropy', optimizer=g_opt)
 
@@ -305,14 +305,14 @@ def train(stage=1, num_epoch=100):
 
                 # generate images and shape
                 generated_images_plot = generated_images.astype('float32') * 127.5 + 127.5
-                generated_images_plot = generated_images_plot.reshape((BATCH_SIZE, res, res))
+                generated_images_plot = generated_images_plot.reshape((BATCH_SIZE, res, res, 3)).astype("uint8")
 
                 plt.figure(figsize=(8, 4))
                 plt.suptitle('stage=%02d,epoch=%04d,index=%04d' % (stage, epoch, index), fontsize=20)
                 for i in range(BATCH_SIZE):
                     plt.subplot(4, 8, i + 1)
                     plt.imshow(generated_images_plot[i])
-                    plt.gray()
+                    # plt.gray()
                     # eliminate ticks
                     plt.xticks([]), plt.yticks([])
 
@@ -336,10 +336,10 @@ def train(stage=1, num_epoch=100):
             save_dis_weight(discriminator)
 
 if __name__ == '__main__':
-    config = tf.compat.v1.ConfigProto(gpu_options=tf.compat.v1.GPUOptions(allow_growth=True))
-    session = tf.compat.v1.Session(config=config)
+    config = tf.ConfigProto(gpu_options=tf.GPUOptions(allow_growth=True))
+    session = tf.Session(config=config)
     KTF.set_session(session)
 
     for stage in range(1,FINAL_STAGE):
-        num_epoch = min(max(10, 2**(stage + 1)), 100)
+        num_epoch = min(100, 2**(stage + 1))
         train(stage=stage, num_epoch=num_epoch)
