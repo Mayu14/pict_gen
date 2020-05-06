@@ -2,8 +2,9 @@
 
 import numpy as np
 from skimage.color import rgb2hsv, hsv2rgb
-from preprocessing import load_all_img, load_face_img, load_bust_img, load_portrait_img, clast2cfirst, cfirst2clast
+from preprocessing import load_all_img, load_face_img, load_bust_img, load_portrait_img, load_extracted_img, clast2cfirst, cfirst2clast
 from keras.preprocessing.image import ImageDataGenerator
+from given.ellipse_blur import multi_block_blur_for_array
 
 """
 やるべきこと
@@ -38,6 +39,8 @@ def __load_img(mode="face"):
         return load_portrait_img(pct_size, is_channel_first)
     elif "all" in mode:
         return load_all_img(pct_size, is_channel_first)
+    elif "extracted" in mode:
+        return load_extracted_img(pct_size, is_channel_first)
     else:
         raise ValueError('function:__load_img must need valid "mode" name')
 
@@ -149,9 +152,9 @@ def __draw_images(datagen, x, result_images):
 def __image_data_generator(img_array):
     datagen = ImageDataGenerator(
         # zca_whitening=False,
-        rotation_range=10,
-        width_shift_range=0.05,
-        height_shift_range=0.05,
+        rotation_range=5,
+        width_shift_range=0.01,
+        height_shift_range=0.01,
         shear_range=0.1,
         zoom_range=[0.99,1.01],
         channel_shift_range=0.01,
@@ -205,7 +208,8 @@ def __inflate_hsv(std_img_array, hdv_variation=6):
                 if not grayscale:
                     new_array[i + j*sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], 0, -max_sat+j*inc_sat, 0)
                 else:
-                    new_array[i + j*sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], np.random.randint(-179,179,1), -max_sat+j*inc_sat, np.random.randint(-99,99,1))
+                    # new_array[i + j*sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], np.random.randint(-179,179,1), -max_sat+j*inc_sat, np.random.randint(-99,99,1))
+                    new_array[i + j * sh[0]] = __adjust_hue_saturation_lightness(img_array_rgb[i], 0, -max_sat + j * inc_sat, 0)
 
         if is_channel_first:
             new_array = clast2cfirst(new_array)
@@ -216,6 +220,7 @@ def __inflate_hsv(std_img_array, hdv_variation=6):
 
 def load_data(mode="face"):
     loaded_img = __load_img(mode)
+    #loaded_img = multi_block_blur_for_array(loaded_img)
     # 読み込んだ上で標準化
     loaded_img = __img2std(loaded_img)
     # 適宜水増し処理
@@ -234,7 +239,6 @@ def main():
     x_train, _ = load_data()
     print(x_train.shape)
     print(np.max(x_train), np.min(x_train))
-
 
 
 if __name__ == '__main__':
