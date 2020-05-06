@@ -29,6 +29,11 @@ def multi_block_blur(img):
         img = apply_ellipse_blur(img, cx, cy, r, r, 0, ksize=(3,3))
     return img
 
+def multi_block_blur_for_array(imgs):
+    for i, img in enumerate(imgs):
+        imgs[i] = multi_block_blur(img)
+    return imgs
+
 def example():
     image = cv2.imread('pic.jpg')
     # ぼかす中心座標
